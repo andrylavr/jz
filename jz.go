@@ -2,7 +2,6 @@ package jz
 
 import (
 	"errors"
-	"fmt"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/console"
 	"github.com/dop251/goja_nodejs/require"
@@ -25,7 +24,6 @@ type Runtime struct {
 }
 
 func GetContent(url string) ([]byte, error) {
-	fmt.Println("GetContent", url)
 	if strings.Contains(url, "http://") || strings.Contains(url, "https://") {
 		resp, err := http.Get(url)
 		if err != nil {
@@ -47,26 +45,17 @@ func New() *Runtime {
 	}
 
 	vm.registry = require.NewRegistryWithLoader(func(name string) ([]byte, error) {
-		fmt.Println(name)
 		for importName, importURL := range vm.ImportMap {
 			if name != "node_modules/"+importName {
 				continue
 			}
 			b, err := GetContent(importURL)
-			//fmt.Println("GetContent after", string(b))
 			if err != nil {
 				return nil, err
 			}
 
 			src := string(b)
-			fmt.Println("goja.Compile", importURL)
-			_, err = goja.Compile(importURL, src, false)
-			if err != nil {
-				log.Println(err)
-				fmt.Println("Transform", importURL)
-				return Transform(src)
-			}
-			return b, err
+			return Transform(src)
 		}
 		return nil, errors.New("Module does not exist")
 	})
@@ -87,8 +76,16 @@ func (r *Runtime) ClearImportMap() {
 }
 
 func Transform(src string) ([]byte, error) {
+	_, err := goja.Compile("", src, false)
+	if err == nil {
+		return []byte(src), err
+	}
+
 	res, err := babel.Transform(strings.NewReader(src), map[string]interface{}{
 		"presets": []string{"es2015"},
+		"plugins": []string{
+			"transform-typescript",
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -107,11 +104,17 @@ func (r *Runtime) RunScript(name, src string) (goja.Value, error) {
 	}
 	src = string(b)
 
-	//fmt.Println(src)
-
 	return r.Runtime.RunScript(name, src)
 }
 
+// RunString executes the given string in the global context.
+func (r *Runtime) RunString(str string) (goja.Value, error) {
+	return r.RunScript("", str)
+}
+
 func init() {
-	babel.Init(4) // Setup 4 transformers (can be any number > 0)
+	err := babel.Init(4) // Setup 4 transformers (can be any number > 0)
+	if err != nil {
+		log.Println(err)
+	}
 }

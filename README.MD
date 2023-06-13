@@ -8,7 +8,8 @@ Based on:
 * https://github.com/jvatic/goja-babel
 
 
-### Example
+### Example 
+`cmd/example1/main.go`
 
 ```go
 package main
@@ -34,3 +35,5 @@ func main() {
 }
 
 ```
+
+See more docs here: https://github.com/dop251/goja
