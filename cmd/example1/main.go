@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/andrylavr/jz"
 	"log"
 )
@@ -16,6 +17,15 @@ func main() {
 	runExample1JS()
 	runExample2TS()
 	runExample3JS()
+	runExample4FieldMapper()
+}
+
+func notOk(err error) bool {
+	if err != nil {
+		log.Println(err)
+		return true
+	}
+	return false
 }
 
 func runExample1JS() {
@@ -24,8 +34,8 @@ func runExample1JS() {
 	vm.ImportMap["three/addons/"] = "https://threejs.org/examples/jsm/"
 
 	_, err := vm.RunScript("example1.js", example1)
-	if err != nil {
-		log.Println(err)
+	if notOk(err) {
+		return
 	}
 }
 
@@ -45,5 +55,25 @@ func runExample3JS() {
 	}
 	if num := v.Export().(int64); num != 4 {
 		panic(num)
+	}
+}
+
+type MyStruct struct {
+	Field int
+}
+
+func (s *MyStruct) Test(f float64) {
+	fmt.Println("MyStruct.Test", s.Field, f)
+}
+
+func runExample4FieldMapper() {
+	vm := jz.New()
+	err := vm.Set("ms", &MyStruct{Field: 123})
+	if notOk(err) {
+		return
+	}
+	_, err = vm.RunString("ms.test(456.7)")
+	if notOk(err) {
+		return
 	}
 }

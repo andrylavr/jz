@@ -60,6 +60,9 @@ func New() *Runtime {
 		return nil, errors.New("Module does not exist")
 	})
 	vm.registry.Enable(vm.Runtime)
+
+	vm.SetFieldNameMapper(goja.UncapFieldNameMapper())
+
 	console.Enable(vm.Runtime)
 
 	return vm
