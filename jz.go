@@ -15,6 +15,8 @@ import (
 
 type ImportMap map[string]string
 
+type Value = goja.Value
+
 type Runtime struct {
 	*goja.Runtime
 	UseBabel      bool
@@ -55,7 +57,7 @@ func New() *Runtime {
 			}
 
 			src := string(b)
-			return Transform(src)
+			return vm.Transform(src)
 		}
 		return nil, errors.New("Module does not exist")
 	})
@@ -78,18 +80,27 @@ func (r *Runtime) ClearImportMap() {
 	r.ImportMap = ImportMap{}
 }
 
-func Transform(src string) ([]byte, error) {
+// Transform transforms src from ES6|TS to ES5
+func (r *Runtime) Transform(src string) ([]byte, error) {
+	if !r.UseBabel {
+		return []byte(src), nil
+	}
 	_, err := goja.Compile("", src, false)
 	if err == nil {
 		return []byte(src), err
 	}
 
-	res, err := babel.Transform(strings.NewReader(src), map[string]interface{}{
+	options := map[string]interface{}{
 		"presets": []string{"es2015"},
-		"plugins": []string{
+	}
+
+	if r.UseTypeScript {
+		options["plugins"] = []string{
 			"transform-typescript",
-		},
-	})
+		}
+	}
+
+	res, err := babel.Transform(strings.NewReader(src), options)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +111,8 @@ func Transform(src string) ([]byte, error) {
 	return b, err
 }
 
-func (r *Runtime) RunScript(name, src string) (goja.Value, error) {
-	b, err := Transform(src)
+func (r *Runtime) RunScript(name, src string) (Value, error) {
+	b, err := r.Transform(src)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +122,7 @@ func (r *Runtime) RunScript(name, src string) (goja.Value, error) {
 }
 
 // RunString executes the given string in the global context.
-func (r *Runtime) RunString(str string) (goja.Value, error) {
+func (r *Runtime) RunString(str string) (Value, error) {
 	return r.RunScript("", str)
 }
 

@@ -41,17 +41,19 @@ func runExample1JS() {
 
 func runExample2TS() {
 	vm := jz.New()
+	//vm.UseBabel = false
+	//vm.UseTypeScript = false
 	_, err := vm.RunScript("example2.ts", example2)
-	if err != nil {
-		log.Println(err)
+	if notOk(err) {
+		return
 	}
 }
 
 func runExample3JS() {
 	vm := jz.New()
 	v, err := vm.RunString("2 + 2")
-	if err != nil {
-		panic(err)
+	if notOk(err) {
+		return
 	}
 	if num := v.Export().(int64); num != 4 {
 		panic(num)
