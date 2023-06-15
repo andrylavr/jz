@@ -1,10 +1,8 @@
 package jz
 
 import (
-	"fmt"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/console"
-	"github.com/dop251/goja_nodejs/require"
 	"github.com/jvatic/goja-babel"
 	"io"
 	"log"
@@ -14,15 +12,17 @@ import (
 )
 
 type ImportMap map[string]string
-
+type ModuleCache map[string][]byte
 type Value = goja.Value
+type Object = goja.Object
 
 type Runtime struct {
 	*goja.Runtime
 	UseBabel      bool
 	UseTypeScript bool
 	ImportMap
-	registry *require.Registry
+	registry    *Registry
+	moduleCache ModuleCache
 }
 
 func GetContent(url string) ([]byte, error) {
@@ -38,52 +38,24 @@ func GetContent(url string) ([]byte, error) {
 	return os.ReadFile(url)
 }
 
-func getModule(vm *Runtime, importURL string) ([]byte, error) {
-	b, err := GetContent(importURL)
-	if err != nil {
-		return nil, err
-	}
-
-	src := string(b)
-	return vm.Transform(src)
-}
-
 func New() *Runtime {
 	vm := &Runtime{
 		Runtime:       goja.New(),
 		UseBabel:      true,
 		UseTypeScript: true,
 		ImportMap:     ImportMap{},
+		moduleCache:   ModuleCache{},
 	}
 
-	vm.registry = require.NewRegistryWithLoader(func(name string) ([]byte, error) {
-		parts := strings.Split(name, "node_modules/")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("module %s does not exist", name)
+	vm.registry = NewRegistryWithLoader(func(path string) ([]byte, error) {
+		b, err := GetContent(path)
+		if err != nil {
+			return nil, err
 		}
-		name = parts[1]
-		fmt.Println(name)
-		if importURL, ok := vm.ImportMap[name]; ok {
-			return getModule(vm, importURL)
-		}
-		for importName, importURL := range vm.ImportMap {
-			if !strings.HasSuffix(importName, "/") {
-				continue
-			}
-			if !strings.HasPrefix(name, importName) {
-				continue
-			}
-			importURLResolved := strings.Replace(name, importName, importURL, 1)
-			b, err := getModule(vm, importURLResolved)
-			if err != nil {
-				continue
-			}
-			return b, err
-		}
-		return nil, fmt.Errorf("module %s does not exist", name)
+		return vm.Transform(string(b))
 	})
-	vm.registry.Enable(vm.Runtime)
 
+	vm.registry.Enable(vm)
 	vm.SetFieldNameMapper(goja.UncapFieldNameMapper())
 
 	console.Enable(vm.Runtime)

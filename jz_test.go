@@ -71,7 +71,7 @@ func TestRunFile(t *testing.T) {
 	vm := jz.New()
 	vm.ImportMap["three"] = "https://threejs.org/build/three.js"
 	vm.ImportMap["three/addons/"] = "https://threejs.org/examples/jsm/"
-	_, err := vm.RunFile("cmd/example1/example1.js")
+	_, err := vm.RunFile("cmd/example1/example3.js")
 	if err != nil {
 		t.Error(err)
 	}
