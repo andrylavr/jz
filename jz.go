@@ -1,7 +1,7 @@
 package jz
 
 import (
-	"errors"
+	"fmt"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/console"
 	"github.com/dop251/goja_nodejs/require"
@@ -38,6 +38,16 @@ func GetContent(url string) ([]byte, error) {
 	return os.ReadFile(url)
 }
 
+func getModule(vm *Runtime, importURL string) ([]byte, error) {
+	b, err := GetContent(importURL)
+	if err != nil {
+		return nil, err
+	}
+
+	src := string(b)
+	return vm.Transform(src)
+}
+
 func New() *Runtime {
 	vm := &Runtime{
 		Runtime:       goja.New(),
@@ -47,19 +57,30 @@ func New() *Runtime {
 	}
 
 	vm.registry = require.NewRegistryWithLoader(func(name string) ([]byte, error) {
+		parts := strings.Split(name, "node_modules/")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("module %s does not exist", name)
+		}
+		name = parts[1]
+		fmt.Println(name)
+		if importURL, ok := vm.ImportMap[name]; ok {
+			return getModule(vm, importURL)
+		}
 		for importName, importURL := range vm.ImportMap {
-			if name != "node_modules/"+importName {
+			if !strings.HasSuffix(importName, "/") {
 				continue
 			}
-			b, err := GetContent(importURL)
-			if err != nil {
-				return nil, err
+			if !strings.HasPrefix(name, importName) {
+				continue
 			}
-
-			src := string(b)
-			return vm.Transform(src)
+			importURLResolved := strings.Replace(name, importName, importURL, 1)
+			b, err := getModule(vm, importURLResolved)
+			if err != nil {
+				continue
+			}
+			return b, err
 		}
-		return nil, errors.New("Module does not exist")
+		return nil, fmt.Errorf("module %s does not exist", name)
 	})
 	vm.registry.Enable(vm.Runtime)
 
@@ -119,6 +140,21 @@ func (r *Runtime) RunScript(name, src string) (Value, error) {
 	src = string(b)
 
 	return r.Runtime.RunScript(name, src)
+}
+
+func (r *Runtime) RunFile(filename string) (Value, error) {
+	b, err := GetContent(filename)
+	if err != nil {
+		return nil, err
+	}
+	src := string(b)
+	b, err = r.Transform(src)
+	if err != nil {
+		return nil, err
+	}
+	src = string(b)
+
+	return r.Runtime.RunScript(filename, src)
 }
 
 // RunString executes the given string in the global context.
