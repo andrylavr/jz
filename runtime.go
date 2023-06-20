@@ -2,12 +2,9 @@ package jz
 
 import (
 	"github.com/dop251/goja"
-	"github.com/dop251/goja_nodejs/console"
 	"github.com/jvatic/goja-babel"
 	"io"
 	"log"
-	"net/http"
-	"os"
 	"strings"
 )
 
@@ -21,21 +18,9 @@ type Runtime struct {
 	UseBabel      bool
 	UseTypeScript bool
 	ImportMap
-	registry    *Registry
-	moduleCache ModuleCache
-}
-
-func GetContent(url string) ([]byte, error) {
-	if strings.Contains(url, "http://") || strings.Contains(url, "https://") {
-		resp, err := http.Get(url)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		return io.ReadAll(resp.Body)
-	}
-
-	return os.ReadFile(url)
+	//require         *Require
+	TransformCacher Cacher
+	ContentCacher   Cacher
 }
 
 func New() *Runtime {
@@ -44,21 +29,12 @@ func New() *Runtime {
 		UseBabel:      true,
 		UseTypeScript: true,
 		ImportMap:     ImportMap{},
-		moduleCache:   ModuleCache{},
 	}
 
-	vm.registry = NewRegistryWithLoader(func(path string) ([]byte, error) {
-		b, err := GetContent(path)
-		if err != nil {
-			return nil, err
-		}
-		return vm.Transform(string(b))
-	})
-
-	vm.registry.Enable(vm)
 	vm.SetFieldNameMapper(goja.UncapFieldNameMapper())
 
-	console.Enable(vm.Runtime)
+	vm.Set("console", NewConsole(vm))
+	vm.Set("require", NewRequire(vm))
 
 	return vm
 }
@@ -74,13 +50,17 @@ func (r *Runtime) ClearImportMap() {
 }
 
 // Transform transforms src from ES6|TS to ES5
-func (r *Runtime) Transform(src string) ([]byte, error) {
+func (r *Runtime) Transform(src string) (string, error) {
+	if r.TransformCacher != nil && r.TransformCacher.Exists(src) {
+		return r.TransformCacher.Get(src), nil
+	}
+
 	if !r.UseBabel {
-		return []byte(src), nil
+		return src, nil
 	}
 	_, err := goja.Compile("", src, false)
 	if err == nil {
-		return []byte(src), err
+		return src, nil
 	}
 
 	options := map[string]interface{}{
@@ -95,43 +75,56 @@ func (r *Runtime) Transform(src string) ([]byte, error) {
 
 	res, err := babel.Transform(strings.NewReader(src), options)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	b, err := io.ReadAll(res)
+	srcTransformed := string(b)
 
-	//fmt.Println(string(b))
+	if err == nil && r.TransformCacher != nil {
+		r.TransformCacher.Save(src, srcTransformed)
+	}
 
-	return b, err
+	return srcTransformed, err
 }
 
 func (r *Runtime) RunScript(name, src string) (Value, error) {
-	b, err := r.Transform(src)
+	src, err := r.Transform(src)
 	if err != nil {
 		return nil, err
 	}
-	src = string(b)
 
 	return r.Runtime.RunScript(name, src)
 }
 
 func (r *Runtime) RunFile(filename string) (Value, error) {
-	b, err := GetContent(filename)
+	src, err := r.getContent(filename)
 	if err != nil {
 		return nil, err
 	}
-	src := string(b)
-	b, err = r.Transform(src)
-	if err != nil {
-		return nil, err
-	}
-	src = string(b)
 
-	return r.Runtime.RunScript(filename, src)
+	return r.RunScript(filename, src)
 }
 
 // RunString executes the given string in the global context.
 func (r *Runtime) RunString(str string) (Value, error) {
 	return r.RunScript("", str)
+}
+
+func (r *Runtime) getContent(url string) (string, error) {
+	isHTTP := strings.Contains(url, "http://") || strings.Contains(url, "https://")
+	if !isHTTP || r.ContentCacher == nil {
+		return GetContent(url)
+	}
+
+	if r.ContentCacher.Exists(url) {
+		return r.ContentCacher.Get(url), nil
+	}
+	content, err := GetContent(url)
+	if err != nil {
+		return "", err
+	}
+	r.ContentCacher.Save(url, content)
+	return content, err
 }
 
 func init() {

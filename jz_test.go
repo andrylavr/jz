@@ -71,6 +71,9 @@ func TestRunFile(t *testing.T) {
 	vm := jz.New()
 	vm.ImportMap["three"] = "https://threejs.org/build/three.js"
 	vm.ImportMap["three/addons/"] = "https://threejs.org/examples/jsm/"
+	vm.TransformCacher = jz.FSCacher{Dir: "cache"}
+	vm.ContentCacher = jz.FSCacher{Dir: "cache"}
+
 	_, err := vm.RunFile("cmd/example1/example3.js")
 	if err != nil {
 		t.Error(err)

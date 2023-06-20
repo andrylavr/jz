@@ -459,5 +459,7 @@ class GameAPI {
     }
 }
 
+console.log("THREE", THREE);
+
 // window.GameAPIJS = new GameAPI()
 new GameAPI()
