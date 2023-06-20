@@ -4,6 +4,7 @@ import (
 	"fmt"
 	js "github.com/dop251/goja"
 	"log"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -35,15 +36,15 @@ func notOk(err error) bool {
 	return false
 }
 
-func (require *Require) require(name string) Value {
-	fmt.Println("require", name)
+func (require *Require) require(name string, fromURL string) Value {
+	fmt.Println("require", name, "fromURL", fromURL)
 
 	if m, ok := require.modules[name]; ok {
 		fmt.Println("already", name)
 		return m
 	}
 
-	resolvedURL, err := require.resolveURL(name)
+	resolvedURL, err := require.resolveURL(name, fromURL)
 	if notOk(err) {
 		return require.vm.NewGoError(err)
 	}
@@ -82,7 +83,8 @@ func (require *Require) require(name string) Value {
 
 	jsModule := require.createModuleObject(resolvedURL)
 	jsExports := jsModule.Get("exports")
-	jsRequire := require.vm.Get("require")
+	//jsRequire := require.vm.Get("require")
+	jsRequire := jsModule.Get("require")
 
 	// Run the module source, with "jsExports" as "this",
 	// "jsExports" as the "exports" variable, "jsRequire"
@@ -102,7 +104,7 @@ func (require *Require) require(name string) Value {
 	return jsExports
 }
 
-func (require *Require) resolveURL(name string) (string, error) {
+func (require *Require) resolveURL(name string, fromURL string) (string, error) {
 	if importURL, ok := require.vm.ImportMap[name]; ok {
 		return importURL, nil
 	} else {
@@ -117,7 +119,20 @@ func (require *Require) resolveURL(name string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("module with name %s is not found", name)
+	notFound := fmt.Errorf("module with name %s is not found", name)
+	if fromURL != "" && isRelativeURL(name) {
+		nameParsed, err := url.Parse(name)
+		if err != nil {
+			return "", notFound
+		}
+		fromURLParsed, err := url.Parse(fromURL)
+		if err != nil {
+			return "", notFound
+		}
+		return fromURLParsed.ResolveReference(nameParsed).String(), nil
+	}
+
+	return "", notFound
 }
 
 type Module struct {
@@ -128,7 +143,7 @@ type Module struct {
 
 func (m *Module) Require(name string) Value {
 	fmt.Println("Module.Require", name, "moduleURL", m.moduleURL)
-	return m.require.require(name)
+	return m.require.require(name, m.moduleURL)
 }
 
 func (r *Require) createModuleObject(moduleURL string) *Object {

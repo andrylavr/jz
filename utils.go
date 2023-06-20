@@ -27,3 +27,7 @@ func GetContent(url string) (string, error) {
 	}
 	return string(b), err
 }
+
+func isRelativeURL(url string) bool {
+	return strings.HasPrefix(url, "../") || strings.HasPrefix(url, "./")
+}
